@@ -135,9 +135,9 @@ export class EmailService {
       )
 
       return { success: response.status === 200, response }
-    } catch (error) {
-      console.error('Email sending failed:', error)
-      return { success: false, error: error.message }
+    } catch (error: any) {
+      console.error('Email sending failed:', error);
+      return { success: false, error };
     }
   }
 }
