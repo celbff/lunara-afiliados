@@ -225,13 +225,28 @@ router.post('/',
         // Criar comissão se houver afiliado
         if (affiliate_id) {
           const { rows: affiliateRows } = await client.query(
-            'SELECT commission_rate FROM affiliates WHERE id = $1',
+            'SELECT commission_rate FROM affiliates WHERE id = $1 AND commission_rate > 0 AND commission_rate <= 100',
             [affiliate_id]
           );
 
           if (affiliateRows.length > 0) {
             const commissionRate = affiliateRows[0].commission_rate;
-            const commissionAmount = (service.price * commissionRate) / 100;
+            
+            // Validate commission rate bounds
+            if (commissionRate <= 0 || commissionRate > 100) {
+              throw new Error('Taxa de comissão inválida para o afiliado');
+            }
+            
+            // Use integer arithmetic to avoid floating-point precision errors
+            // Convert to cents, calculate, then convert back to currency units
+            const servicePriceCents = Math.round(service.price * 100);
+            const commissionAmountCents = Math.round((servicePriceCents * commissionRate) / 100);
+            const commissionAmount = commissionAmountCents / 100;
+            
+            // Additional validation
+            if (commissionAmount < 0 || commissionAmount > service.price) {
+              throw new Error('Valor de comissão calculado está fora dos limites válidos');
+            }
 
             await client.query(
               `INSERT INTO commissions (affiliate_id, booking_id, amount, percentage, status, created_at)

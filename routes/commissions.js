@@ -167,23 +167,7 @@ router.post('/:id/pay',
       const { payment_method, payment_reference, notes } = req.body;
 
       const result = await transaction(async (client) => {
-        // Verificar se comissão existe e está pendente
-        const { rows: commissionRows } = await client.query(
-          `SELECT c.*, au.name as affiliate_name, au.email as affiliate_email
-           FROM commissions c
-           JOIN affiliates af ON c.affiliate_id = af.id
-           JOIN users au ON af.user_id = au.id
-           WHERE c.id = $1 AND c.status = 'pending'`,
-          [id]
-        );
-
-        if (commissionRows.length === 0) {
-          throw new Error('Comissão não encontrada ou já processada');
-        }
-
-        const commission = commissionRows[0];
-
-        // Marcar como paga
+        // Atomically update commission status and get commission data
         const { rows: updatedRows } = await client.query(
           `UPDATE commissions 
            SET status = 'paid', 
@@ -192,10 +176,26 @@ router.post('/:id/pay',
                payment_reference = $3,
                notes = $4,
                updated_at = NOW()
-           WHERE id = $1
+           WHERE id = $1 AND status = 'pending'
            RETURNING *`,
           [id, payment_method, payment_reference, notes]
         );
+
+        if (updatedRows.length === 0) {
+          throw new Error('Comissão não encontrada ou já processada');
+        }
+
+        // Get affiliate info for the commission
+        const { rows: commissionRows } = await client.query(
+          `SELECT c.*, au.name as affiliate_name, au.email as affiliate_email
+           FROM commissions c
+           JOIN affiliates af ON c.affiliate_id = af.id
+           JOIN users au ON af.user_id = au.id
+           WHERE c.id = $1`,
+          [id]
+        );
+
+        const commission = commissionRows[0];
 
         // Atualizar total de comissões do afiliado
         await client.query(

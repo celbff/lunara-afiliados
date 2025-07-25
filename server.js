@@ -62,11 +62,31 @@ app.get('/health', async (req, res) => {
 // Error handler
 app.use((error, req, res, next) => {
   console.error('Erro:', error);
+  
+  // Sanitize error messages to prevent information disclosure
+  let message = 'Erro interno do servidor';
+  
+  if (process.env.NODE_ENV === 'development') {
+    // Even in development, filter out sensitive information
+    const sensitivePatterns = [
+      /password/i,
+      /token/i,
+      /secret/i,
+      /key/i,
+      /connection/i,
+      /database/i,
+      /env/i
+    ];
+    
+    const originalMessage = error.message || '';
+    const isSensitive = sensitivePatterns.some(pattern => pattern.test(originalMessage));
+    
+    message = isSensitive ? 'Erro interno do servidor (dados sensíveis ocultados)' : originalMessage;
+  }
+  
   res.status(error.status || 500).json({
     success: false,
-    message: process.env.NODE_ENV === 'development' 
-      ? error.message 
-      : 'Erro interno do servidor'
+    message
   });
 });
 
